@@ -56,6 +56,8 @@ import {SantaToken} from "./SantaToken.sol";
  * 
  * @notice Santas's naughty or nice list, all on chain!
  */
+
+// [LOW] @audit SantasList and TokenURI contract cannot be deployed due it's size that exceeds 24kb.
 contract SantasList is ERC721, TokenUri {
     error SantasList__NotSanta();
     error SantasList__SecondCheckDoesntMatchFirst();
@@ -66,6 +68,8 @@ contract SantasList is ERC721, TokenUri {
     /*//////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
+    // [LOW] @audit Status enum missing `UNKNOWN`
+    // [HIGH] @audit wrong Status order, every Address is Considered `NICE` by Default.
     enum Status {
         NICE,
         EXTRA_NICE,
@@ -83,6 +87,7 @@ contract SantasList is ERC721, TokenUri {
     SantaToken private immutable i_santaToken;
 
     // This variable is ok even if it's off by 24 hours.
+                                                      //1_735_084_800 
     uint256 public constant CHRISTMAS_2023_BLOCK_TIME = 1_703_480_381;
     // The cost of santa tokens for naughty people to buy presents
     uint256 public constant PURCHASED_PRESENT_COST = 2e18;
@@ -118,6 +123,7 @@ contract SantasList is ERC721, TokenUri {
      * @param person The person to check
      * @param status The status of the person
      */
+    // [HIGH] @audit anyone can call this function and Set a Status for himself or Set Status For Others.
     function checkList(address person, Status status) external {
         s_theListCheckedOnce[person] = status;
         emit CheckedOnce(person, status);
@@ -144,7 +150,10 @@ contract SantasList is ERC721, TokenUri {
      *  - Extra Nice: Collect an NFT and a SantaToken
      * This should not be callable until Christmas 2023 (give or take 24 hours), and addresses should not be able to collect more than once.
      */
+
+    // [HIGH] @audit `NICE` and `EXTRA_NICE` people can get infinite amount of NFT And SantaTokens and then they Can call `buyPresent` Function to buy more NFT's.
     function collectPresent() external {
+        // [LOW] block.timestamp works differently in Arbitrum Network. CHRISTMAS_2023_BLOCK_TIME should be Adjusted to be 12 hours after the Christmass Time in Unix timestamp so this function can be Called within 24 hours before or after the chirstmass.
         if (block.timestamp < CHRISTMAS_2023_BLOCK_TIME) {
             revert SantasList__NotChristmasYet();
         }
@@ -154,10 +163,7 @@ contract SantasList is ERC721, TokenUri {
         if (s_theListCheckedOnce[msg.sender] == Status.NICE && s_theListCheckedTwice[msg.sender] == Status.NICE) {
             _mintAndIncrement();
             return;
-        } else if (
-            s_theListCheckedOnce[msg.sender] == Status.EXTRA_NICE
-                && s_theListCheckedTwice[msg.sender] == Status.EXTRA_NICE
-        ) {
+        } else if (s_theListCheckedOnce[msg.sender] == Status.EXTRA_NICE && s_theListCheckedTwice[msg.sender] == Status.EXTRA_NICE) {
             _mintAndIncrement();
             i_santaToken.mint(msg.sender);
             return;
@@ -169,6 +175,9 @@ contract SantasList is ERC721, TokenUri {
      * @notice Buy a present for someone else. This should only be callable by anyone with SantaTokens.
      * @dev You'll first need to approve the SantasList contract to spend your SantaTokens.
      */
+    
+    // [LOW] @audit in the docs it's said that to buy present, msg.sender should pay 2e18 SantaTokens to Receive NFT but below, We Pay 1e18 SantaTokens to get the NFT.
+    // [HIGH] if We Pass Someone Address that holds atleast 1e18 SantaToken's, it will burn the Given Address Tokens And then We're (msg.sender) Gonna Receive the NFT.
     function buyPresent(address presentReceiver) external {
         i_santaToken.burn(presentReceiver);
         _mintAndIncrement();
@@ -177,6 +186,7 @@ contract SantasList is ERC721, TokenUri {
     /*//////////////////////////////////////////////////////////////
                           INTERNAL AND PRIVATE
     //////////////////////////////////////////////////////////////*/
+    // [HIGH] @audit We do Not Set TOKEN URI for the given tokenId we mint the User, which results in the msg.sender receiving empty ERC721 token that is Not the Santa NFT.
     function _mintAndIncrement() private {
         _safeMint(msg.sender, s_tokenCounter++);
     }

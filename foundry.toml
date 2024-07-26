@@ -6,7 +6,7 @@ remappings = [
     '@openzeppelin/contracts=lib/openzeppelin-contracts/contracts',
     '@solmate=lib/solmate-bad',
 ]
-ffi = true
+ffi = false
 evm_version = "paris"
 
 [fmt]
